@@ -3,6 +3,9 @@ import Cocoa
 // - Tag: ItemIdentifiers
 private extension NSToolbarItem.Identifier {
     static let searchItem: NSToolbarItem.Identifier = NSToolbarItem.Identifier("SearchItem")
+    static let toggleFirstSidebarItem: NSToolbarItem.Identifier = NSToolbarItem.Identifier("ToggleFirstSidebarItem")
+    static let toggleLastSidebarItem: NSToolbarItem.Identifier = NSToolbarItem.Identifier("ToggleLastSidebarItem")
+    static let itemListTrackingSeparator = NSToolbarItem.Identifier("ItemListTrackingSeparator")
 }
 
 class MainWindowController: NSWindowController, NSToolbarDelegate {
@@ -12,8 +15,6 @@ class MainWindowController: NSWindowController, NSToolbarDelegate {
     @IBOutlet var contentListViewController: ContentListViewController!
     @IBOutlet var detailViewController: DetailViewController!
     @IBOutlet weak var toolbar: NSToolbar!
-    var toggleSidebar: NSTrackingSeparatorToolbarItem?
-    var showFonts: NSTrackingSeparatorToolbarItem?
     
     // Dangerous convenience alias so you can access the NSSplitViewController and manipulate it later on
     private var splitViewController: NSSplitViewController! {
@@ -39,40 +40,130 @@ class MainWindowController: NSWindowController, NSToolbarDelegate {
         splitViewController.addSplitViewItem(detailItem)
         self.splitViewController = splitViewController
         
-        
-        toggleSidebar?.splitView = splitViewController.splitView
-        showFonts?.splitView = splitViewController.splitView
+        toolbar.insertItem(withItemIdentifier: .itemListTrackingSeparator, at: 5)
+    }
+    
+    @objc func toggleFirstPanel() {
+        guard let firstSplitView = splitViewController.splitViewItems.first else { return }
+        if firstSplitView.animator().isCollapsed {
+            firstSplitView.animator().isCollapsed = false
+        } else {
+            firstSplitView.animator().isCollapsed = true
+        }
+    }
+    
+    @objc func toggleLastPanel() {
+        guard let lastSplitView = splitViewController.splitViewItems.last else { return }
+        if lastSplitView.animator().isCollapsed {
+            lastSplitView.animator().isCollapsed = false
+        } else {
+            lastSplitView.animator().isCollapsed = true
+        }
     }
     
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        return [
-            .toggleSidebar,
-            .showFonts,
+        return  [
+            .toggleFirstSidebarItem,
+            .flexibleSpace,
             .showColors,
-            .searchItem
+            .sidebarTrackingSeparator,
+            .showFonts,
+            .searchItem,
+            .flexibleSpace,
+            .toggleLastSidebarItem
+        ]
+    }
+    
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        return [
+            .toggleFirstSidebarItem,
+            .showColors,
+            .flexibleSpace,
+            .space,
+            .showFonts,
+            .searchItem,
+            .toggleLastSidebarItem
         ]
     }
     
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        var toolbarItem: NSToolbarItem?
+        switch itemIdentifier {
+        case .itemListTrackingSeparator:
+            if ((splitViewController) != nil) {
+                return NSTrackingSeparatorToolbarItem(identifier: .itemListTrackingSeparator, splitView: splitViewController.splitView, dividerIndex: 1)
+            } else {
+                return nil
+            }
+        case .searchItem:
+            return NSSearchToolbarItem(itemIdentifier: .searchItem)
+        case .toggleFirstSidebarItem:
+            let toolbarItem = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier.toggleFirstSidebarItem)
+            toolbarItem.label = "Sidebar"
+            toolbarItem.paletteLabel = "Sidebar"
+            toolbarItem.toolTip = "Toggle Sidebar"
+            toolbarItem.target = self
+            toolbarItem.action = #selector(self.toggleFirstPanel)
+            toolbarItem.image = NSImage(systemSymbolName: "sidebar.leading", accessibilityDescription: nil)
+            
+            let menuItem = NSMenuItem()
+            menuItem.submenu = nil
+            menuItem.title = "Sidebar"
+            
+            toolbarItem.menuFormRepresentation = menuItem
+            return toolbarItem
+        case .toggleLastSidebarItem:
+            let toolbarItem = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier.toggleFirstSidebarItem)
+            toolbarItem.label = "Sidebar"
+            toolbarItem.paletteLabel = "Sidebar"
+            toolbarItem.toolTip = "Toggle Sidebar"
+            toolbarItem.target = self
+            toolbarItem.action = #selector(self.toggleLastPanel)
+            toolbarItem.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: nil)
+            
+            let menuItem = NSMenuItem()
+            menuItem.submenu = nil
+            menuItem.title = "Sidebar"
+            
+            toolbarItem.menuFormRepresentation = menuItem
+            return toolbarItem
+        default:
+            return NSToolbarItem(itemIdentifier: itemIdentifier)
+        }
+    }
+    
+    func customToolbarItem(
+        itemForItemIdentifier itemIdentifier: String,
+        label: String,
+        paletteLabel: String,
+        toolTip: String,
+        itemContent: AnyObject) -> NSToolbarItem? {
         
-        if itemIdentifier == NSToolbarItem.Identifier.toggleSidebar {
-            toggleSidebar = NSTrackingSeparatorToolbarItem(identifier: NSToolbarItem.Identifier.toggleSidebar, splitView: splitViewController.splitView, dividerIndex: 0)
-            toolbarItem = toggleSidebar
+        let toolbarItem = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier(rawValue: itemIdentifier))
+        
+        toolbarItem.label = label
+        toolbarItem.paletteLabel = paletteLabel
+        toolbarItem.toolTip = toolTip
+        toolbarItem.target = self
+        
+        // Set the right attribute, depending on if we were given an image or a view.
+        if itemContent is NSImage {
+            if let image = itemContent as? NSImage {
+                toolbarItem.image = image
+            }
+        } else if itemContent is NSView {
+            if let view = itemContent as? NSView {
+                toolbarItem.view = view
+            }
+        } else {
+            assertionFailure("Invalid itemContent: object")
         }
         
-        else if itemIdentifier == NSToolbarItem.Identifier.showFonts {
-            showFonts = NSTrackingSeparatorToolbarItem(identifier: NSToolbarItem.Identifier.showFonts, splitView: splitViewController.splitView, dividerIndex: 1)
-            toolbarItem = showFonts
-        }
-        
-        else if itemIdentifier == NSToolbarItem.Identifier.searchItem {
-            let searchItem = NSSearchToolbarItem(itemIdentifier: NSToolbarItem.Identifier.searchItem)
-            searchItem.searchField = NSSearchField.init(frame: NSRect(x: 0, y: 0, width: 30, height: 22))
-            toolbarItem = searchItem
-        }
+        // We actually need an NSMenuItem here, so we construct one.
+        let menuItem: NSMenuItem = NSMenuItem()
+        menuItem.submenu = nil
+        menuItem.title = label
+        toolbarItem.menuFormRepresentation = menuItem
         
         return toolbarItem
     }
-    
 }
